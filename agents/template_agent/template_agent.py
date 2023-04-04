@@ -162,14 +162,14 @@ class TemplateAgent(DefaultParty):
         """This method is called when it is our turn. It should decide upon an action
         to perform and send this action to the opponent.
         """
+        my_bid = self.find_bid()
         # check if the last received offer is good enough
-        if self.accept_condition(self.last_received_bid):
+        if self.accept_condition(self.last_received_bid, my_bid):
             # if so, accept the offer
             action = Accept(self.me, self.last_received_bid)
         else:
             # if not, find a bid to propose as counter offer
-            bid = self.find_bid()
-            action = Offer(self.me, bid)
+            action = Offer(self.me, my_bid)
 
         # send the action
         self.send_action(action)
@@ -187,7 +187,7 @@ class TemplateAgent(DefaultParty):
     ################################## Example methods below ##################################
     ###########################################################################################
 
-    def accept_condition(self, bid: Bid) -> bool:
+    def accept_condition(self, bid: Bid, my_bid) -> bool:
         if bid is None:
             return False
 
@@ -197,8 +197,12 @@ class TemplateAgent(DefaultParty):
         # very basic approach that accepts if the offer is valued above 0.7 and
         # 95% of the time towards the deadline has passed
         conditions = [
-            self.profile.getUtility(bid) > 0.8,
+            # threshold for accepting decreases over time [0.9 to 0.65]
+            self.profile.getUtility(bid) > (0.9 - (progress / 4)),
+            # accept if deadline nearly ended
             progress > 0.95,
+            # accept if opponents last bid is better than your next bid
+            self.profile.getUtility(bid) > self.profile.getUtility(my_bid),
         ]
         return all(conditions)
 
