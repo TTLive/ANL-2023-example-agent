@@ -9,3 +9,5 @@ results
 
 *.sbatch
 *.log
+
+.DS_Store

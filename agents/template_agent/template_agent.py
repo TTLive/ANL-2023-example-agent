@@ -3,6 +3,7 @@ from random import randint
 from time import time
 from typing import cast
 
+import geniusweb
 from geniusweb.actions.Accept import Accept
 from geniusweb.actions.Action import Action
 from geniusweb.actions.Offer import Offer
@@ -45,6 +46,7 @@ class TemplateAgent(DefaultParty):
         self.progress: ProgressTime = None
         self.me: PartyId = None
         self.other: str = None
+        self.all_good_bids = list(Bid, float)
         self.settings: Settings = None
         self.storage_dir: str = None
 
@@ -79,6 +81,10 @@ class TemplateAgent(DefaultParty):
             )
             self.profile = profile_connection.getProfile()
             self.domain = self.profile.getDomain()
+
+            ### gets all good bids with a utility threshold of 0.7
+            self.all_good_bids = self.getAllBids(AllBidsList(self.domain), 0.7)
+
             profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
@@ -249,3 +255,14 @@ class TemplateAgent(DefaultParty):
             score += opponent_score
 
         return score
+
+    #todo optimise speed, could go in report
+    def getAllGoodBids(self, all_bids, threshold):
+        bids = list(Bid)
+        for bid in all_bids:
+            util = self.profile.getUtility(bid)
+            if util > threshold:
+                bids.append(bid, util)
+        return bids.sort(key=lambda a: a[1])
+
+
