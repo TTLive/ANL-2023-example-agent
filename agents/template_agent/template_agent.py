@@ -46,7 +46,7 @@ class TemplateAgent(DefaultParty):
         self.progress: ProgressTime = None
         self.me: PartyId = None
         self.other: str = None
-        self.all_good_bids = list(Bid, float)
+        self.all_good_bids: [(Bid, float)] = None
         self.settings: Settings = None
         self.storage_dir: str = None
 
@@ -83,7 +83,7 @@ class TemplateAgent(DefaultParty):
             self.domain = self.profile.getDomain()
 
             ### gets all good bids with a utility threshold of 0.7
-            self.all_good_bids = self.getAllBids(AllBidsList(self.domain), 0.7)
+            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.7)
 
             profile_connection.close()
 
@@ -214,15 +214,14 @@ class TemplateAgent(DefaultParty):
 
     def find_bid(self) -> Bid:
         # compose a list of all possible bids
-        domain = self.profile.getDomain()
-        all_bids = AllBidsList(domain)
+        all_bids = [x[0] for x in self.all_good_bids]
 
         best_bid_score = 0.0
         best_bid = None
 
         # take 500 attempts to find a bid according to a heuristic score
         for _ in range(500):
-            bid = all_bids.get(randint(0, all_bids.size() - 1))
+            bid = all_bids[randint(0, len(all_bids) - 1)]
             bid_score = self.score_bid(bid)
             if bid_score > best_bid_score:
                 best_bid_score, best_bid = bid_score, bid
@@ -258,11 +257,12 @@ class TemplateAgent(DefaultParty):
 
     #todo optimise speed, could go in report
     def getAllGoodBids(self, all_bids, threshold):
-        bids = list(Bid)
+        bids : [(Bid, float)] = []
         for bid in all_bids:
             util = self.profile.getUtility(bid)
             if util > threshold:
-                bids.append(bid, util)
-        return bids.sort(key=lambda a: a[1])
+                bids.append((bid, util))
+        bids.sort(key=lambda a: a[1])
+        return bids
 
 
