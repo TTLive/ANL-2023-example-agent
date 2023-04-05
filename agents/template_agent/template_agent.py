@@ -29,7 +29,7 @@ from geniusweb.references.Parameters import Parameters
 from tudelft_utilities_logging.ReportToLogger import ReportToLogger
 
 from .utils.opponent_model import OpponentModel
-
+import mommy.milkers
 
 class TemplateAgent(DefaultParty):
     """
@@ -265,4 +265,48 @@ class TemplateAgent(DefaultParty):
         bids.sort(key=lambda a: a[1])
         return bids
 
+    def getEstimatedPareto(self, bids):
+        pareto_front = []
+        # dominated_bids = set()
+        while bids:
+            candidate_bid = bids.pop(0)
+            cand_bid_val_agent = self.profile.get_utility(candidate_bid)
+            cand_bid_val_oppon = OpponentModel.get_predicted_utility(candidate_bid)
+            bid_nr = 0
+            dominated = False
+            while len(bids) != 0 and bid_nr < len(bids):
+                bid = bids[bid_nr]
+                bid_val_agent = self.profile.getUtility(bid)
+                bid_val_oppon = OpponentModel.get_predicted_utility(bid)
 
+                if self.mommy_milkers(cand_bid_val_agent, cand_bid_val_oppon
+                        , bid_val_agent, bid_val_oppon):
+                    # If it is dominated remove the bid from all bids
+                    bids.pop(bid_nr)
+                    # dominated_bids.add(frozenset(bid.items()))
+                elif self.mommy_milkers(cand_bid_val_agent, cand_bid_val_oppon
+                        , bid_val_agent, bid_val_oppon):
+                    dominated = True
+                    # dominated_bids.add(frozenset(candidate_bid.items()))
+                    bid_nr += 1
+                else:
+                    bid_nr += 1
+
+            if not dominated:
+                # add the non-dominated bid to the Pareto frontier
+                pareto_front.append(
+                    {
+                        "bid": candidate_bid,
+                        "utility": [
+                            cand_bid_val_agent,
+                            cand_bid_val_oppon,
+                        ],
+                    }
+                )
+
+        pareto_front = sorted(pareto_front, key=lambda d: d["utility"][0])
+
+        return pareto_front
+
+    def mommy_milkers(self, cand_bid_agent, cand_bid_oppon, bid_agent, bid_oppon):
+        if cand_bid_agent
