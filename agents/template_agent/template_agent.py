@@ -80,11 +80,11 @@ class TemplateAgent(DefaultParty):
             )
             self.profile = profile_connection.getProfile()
             self.domain = self.profile.getDomain()
-
+            self.opponent_model = OpponentModel(self.domain)
             ### gets all good bids with a utility threshold of 0.7
             self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.7)
-            #pareto = self.getEstimatedPareto([x[0] for x in self.all_good_bids])
-            #print[pareto[0]]
+            pareto = self.getEstimatedPareto([x[0] for x in self.all_good_bids])
+
             profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
@@ -292,8 +292,8 @@ class TemplateAgent(DefaultParty):
                     {
                         "bid": candidate_bid,
                         "utility": [
-                            self.profile.getUtility(bid),
-                            OpponentModel.get_predicted_utility(bid),
+                            self.profile.getUtility(candidate_bid),
+                            self.opponent_model.get_predicted_utility(candidate_bid),
                         ],
                     }
                 )
