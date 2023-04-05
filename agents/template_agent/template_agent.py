@@ -29,7 +29,6 @@ from geniusweb.references.Parameters import Parameters
 from tudelft_utilities_logging.ReportToLogger import ReportToLogger
 
 from .utils.opponent_model import OpponentModel
-import mommy.milkers
 
 class TemplateAgent(DefaultParty):
     """
@@ -46,7 +45,7 @@ class TemplateAgent(DefaultParty):
         self.progress: ProgressTime = None
         self.me: PartyId = None
         self.other: str = None
-        self.all_good_bids: [(Bid, float)] = None
+        self.all_good_bids: list(Bid, float) = None
         self.settings: Settings = None
         self.storage_dir: str = None
 
@@ -84,7 +83,8 @@ class TemplateAgent(DefaultParty):
 
             ### gets all good bids with a utility threshold of 0.7
             self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.7)
-
+            #pareto = self.getEstimatedPareto([x[0] for x in self.all_good_bids])
+            #print[pareto[0]]
             profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
@@ -257,7 +257,7 @@ class TemplateAgent(DefaultParty):
 
     #todo optimise speed, could go in report
     def getAllGoodBids(self, all_bids, threshold):
-        bids : [(Bid, float)] = []
+        bids : list(Bid, float) = []
         for bid in all_bids:
             util = self.profile.getUtility(bid)
             if util > threshold:
@@ -270,22 +270,16 @@ class TemplateAgent(DefaultParty):
         # dominated_bids = set()
         while bids:
             candidate_bid = bids.pop(0)
-            cand_bid_val_agent = self.profile.get_utility(candidate_bid)
-            cand_bid_val_oppon = OpponentModel.get_predicted_utility(candidate_bid)
             bid_nr = 0
             dominated = False
             while len(bids) != 0 and bid_nr < len(bids):
                 bid = bids[bid_nr]
-                bid_val_agent = self.profile.getUtility(bid)
-                bid_val_oppon = OpponentModel.get_predicted_utility(bid)
 
-                if self.mommy_milkers(cand_bid_val_agent, cand_bid_val_oppon
-                        , bid_val_agent, bid_val_oppon):
+                if self._dominates(candidate_bid, bid):
                     # If it is dominated remove the bid from all bids
                     bids.pop(bid_nr)
                     # dominated_bids.add(frozenset(bid.items()))
-                elif self.mommy_milkers(cand_bid_val_agent, cand_bid_val_oppon
-                        , bid_val_agent, bid_val_oppon):
+                elif self._dominates(candidate_bid, bid):
                     dominated = True
                     # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
@@ -298,8 +292,8 @@ class TemplateAgent(DefaultParty):
                     {
                         "bid": candidate_bid,
                         "utility": [
-                            cand_bid_val_agent,
-                            cand_bid_val_oppon,
+                            self.profile.getUtility(bid),
+                            OpponentModel.get_predicted_utility(bid),
                         ],
                     }
                 )
@@ -308,5 +302,13 @@ class TemplateAgent(DefaultParty):
 
         return pareto_front
 
-    def mommy_milkers(self, cand_bid_agent, cand_bid_oppon, bid_agent, bid_oppon):
-        if cand_bid_agent
+    def _dominates(self, bid, candidate_bid):
+        if self.profile.getUtility(bid) < self.profile.getUtility(candidate_bid):
+            return False
+        elif self.opponent_model.get_predicted_utility(bid) < self.opponent_model.get_predicted_utility(
+            candidate_bid
+        ):
+            return False
+        else:
+            return True
+
