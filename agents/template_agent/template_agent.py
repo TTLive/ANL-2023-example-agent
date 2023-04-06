@@ -1,4 +1,6 @@
+import decimal
 import logging
+import math
 from random import randint
 from time import time
 from typing import cast
@@ -50,6 +52,9 @@ class TemplateAgent(DefaultParty):
         self.storage_dir: str = None
 
         self.last_received_bid: Bid = None
+        self.last_offered_bid: Bid = None
+        self.mirrored_vector: tuple[float, float] = None
+
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
 
@@ -161,8 +166,27 @@ class TemplateAgent(DefaultParty):
 
             # update opponent model with bid
             self.opponent_model.update(bid)
+
+            if self.last_received_bid:
+                test = self.opponent_model.get_predicted_utility(self.last_received_bid)
+                test2 = self.opponent_model.get_predicted_utility(bid)
+                received_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
+                              - self.opponent_model.get_predicted_utility(bid)
+                offered_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
+                self.mirrored_vector = self.normalize(offered_val, decimal.Decimal(str(received_val)))
+
             # set bid as last received
             self.last_received_bid = bid
+
+    def normalize(self, offered, received):
+        length = math.sqrt(received*received + offered*offered)
+        off = 0
+        rec = 0
+        if offered != 0:
+            off = float(offered) / length
+        if received != 0:
+            rec = float(received) / length
+        return off, rec
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
@@ -226,7 +250,14 @@ class TemplateAgent(DefaultParty):
             if bid_score > best_bid_score:
                 best_bid_score, best_bid = bid_score, bid
 
+        self.last_offered_bid = best_bid
+
         return best_bid
+
+    def find_mirrored_bid(self) -> Bid:
+        opponent_val = OpponentModel.get_predicted_utility(self.last_received_bid)
+        my_val = self.profile.getUtility(self.last_received_bid)
+
 
     def score_bid(self, bid: Bid, alpha: float = 0.95, eps: float = 0.1) -> float:
         """Calculate heuristic score for a bid
