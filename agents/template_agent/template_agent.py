@@ -1,9 +1,12 @@
+import decimal
 import logging
+import math
 from random import randint, choice
 from time import time
 from typing import cast
 import numpy as np
 
+import numpy
 import geniusweb
 from geniusweb.actions.Accept import Accept
 from geniusweb.actions.Action import Action
@@ -51,8 +54,11 @@ class TemplateAgent(DefaultParty):
         self.settings: Settings = None
         self.storage_dir: str = None
 
-        self.last_received_bid: Bid = None
         self.previous_bids: list[Bid] = []
+        self.last_received_bid: Bid = None
+        self.last_offered_bid: Bid = None
+        self.mirrored_vector: list[int] = None
+
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
 
@@ -84,6 +90,8 @@ class TemplateAgent(DefaultParty):
             self.profile = profile_connection.getProfile()
             self.domain = self.profile.getDomain()
             self.opponent_model = OpponentModel(self.domain)
+
+
             ### gets all good bids with a utility threshold of 0.7
             self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
@@ -165,14 +173,31 @@ class TemplateAgent(DefaultParty):
 
             # update opponent model with bid
             self.opponent_model.update(bid)
+
+            if self.last_received_bid:
+                received_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
+                              - self.opponent_model.get_predicted_utility(bid)
+                offered_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
+                self.mirrored_vector = self.normalize(offered_val, decimal.Decimal(str(received_val)))
+
             # set bid as last received
             self.last_received_bid = bid
+
+    def normalize(self, offered, received):
+        length = math.sqrt(received*received + offered*offered)
+        off = 0
+        rec = 0
+        if offered != 0:
+            off = float(offered) / length
+        if received != 0:
+            rec = float(received) / length
+        return off, rec
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
         to perform and send this action to the opponent.
         """
-        my_bid = self.find_bid()
+        my_bid = self.find_mirrored_bid()
         # check if the last received offer is good enough
         if self.accept_condition(self.last_received_bid, my_bid):
             # if so, accept the offer
@@ -340,3 +365,28 @@ class TemplateAgent(DefaultParty):
         else:
             return True
 
+    def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
+        # normalize step?
+        bid_my_util = self.profile.getUtility(bid) + decimal.Decimal(str(step[0]))
+        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(step[1]))
+        # finds actiall closest point to step
+        #distances = []
+        #for b in paretoFrontier:
+        #    distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
+        #closest_point_index = distances.index(numpy.minimum(distances))
+        newBid = None
+        for b in paretoFrontier:
+            if (bid_opp_util <= b["utility"][1]):
+                newBid = b
+                break
+        if (newBid == None):
+            return bid
+        else:
+            return newBid["bid"]
+
+    def _nashProduct(self, paretoFrontier):
+        ratios = []
+        for b in paretoFrontier:
+            ratios.append(numpy.abs(b["utility"][0] - b["utility"][1]))
+        nash_index = ratios.index(numpy.minimum(ratios))
+        return paretoFrontier[nash_index]["bid"]
