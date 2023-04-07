@@ -1,7 +1,8 @@
 import logging
-from random import randint
+from random import randint, choice
 from time import time
 from typing import cast
+import numpy as np
 
 import geniusweb
 from geniusweb.actions.Accept import Accept
@@ -46,10 +47,12 @@ class TemplateAgent(DefaultParty):
         self.me: PartyId = None
         self.other: str = None
         self.all_good_bids: list(Bid, float) = None
+        self.good_bids_values = None
         self.settings: Settings = None
         self.storage_dir: str = None
 
         self.last_received_bid: Bid = None
+        self.previous_bids: list[Bid] = []
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
 
@@ -82,10 +85,11 @@ class TemplateAgent(DefaultParty):
             self.domain = self.profile.getDomain()
             self.opponent_model = OpponentModel(self.domain)
             ### gets all good bids with a utility threshold of 0.7
-            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.7)
-            pareto = self.getEstimatedPareto([x[0] for x in self.all_good_bids])
-
-            profile_connection.close()
+            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
+            #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
+            self.good_bids_values = np.array([x[1] for x in self.all_good_bids])
+            self.all_good_bids = [x[0] for x in self.all_good_bids]
+            #profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
         # that is performed by one of the agents (including yourself).
@@ -175,6 +179,7 @@ class TemplateAgent(DefaultParty):
             action = Accept(self.me, self.last_received_bid)
         else:
             # if not, find a bid to propose as counter offer
+            self.previous_bids.append(my_bid)
             action = Offer(self.me, my_bid)
 
         # send the action
@@ -205,30 +210,53 @@ class TemplateAgent(DefaultParty):
         conditions = [
             # threshold for accepting decreases over time [0.9 to 0.65]
             self.profile.getUtility(bid) > (0.9 - (progress / 4)),
+
             # accept if deadline nearly ended
-            progress > 0.95,
+            # Maybe change this to calculate avg turn time from previous turns and then if there is not enough time left accept
+            progress > 0.9,
             # accept if opponents last bid is better than your next bid
             self.profile.getUtility(bid) > self.profile.getUtility(my_bid),
         ]
-        return all(conditions)
+        return any(conditions)
 
     def find_bid(self) -> Bid:
         # compose a list of all possible bids
-        all_bids = [x[0] for x in self.all_good_bids]
+        progress = self.progress.get(time() * 1000)
+        #first turn -> make best possbile bid
+        if len(self.previous_bids) < 1:
+            best_bid = self.all_good_bids[-1]
+            return best_bid
+        elif progress < 0.05:
+            start = np.argmax(self.good_bids_values > 0.8)
+            rand_bid = choice(self.all_good_bids[start:])
+            if rand_bid:
+                return rand_bid
+            else: 
+                return self.previous_bids[-1]
+        elif progress < 0.8:
+            #slow linear progress
+            #threshold of (1.0-0.8) -> (0.72-0.52) over progress form 0.2 -> 0.8
 
-        best_bid_score = 0.0
-        best_bid = None
+            threshold = 0.8 * (1 - (progress * 0.5))
+            start = np.argmax(self.good_bids_values > threshold)
+            end = np.argmax(self.good_bids_values[start:]> threshold + 0.15)
+            paretoBids = self.getEstimatedPareto(self.all_good_bids[start : start+end])
+            if len(paretoBids) > 0:
+                return paretoBids[0]["bid"]
+            else:
+                return self.previous_bids[-1]
+        #faster linear progress
+        else:
+            threshold = 0.72 * (1.7 - progress)
+            end = np.argmax(self.good_bids_values> threshold)
+            paretoBids = self.getEstimatedPareto(self.all_good_bids[:end])
+            if len(paretoBids) > 0:
+                return paretoBids[0]["bid"]
+            else:
+                return self.previous_bids[-1]
 
-        # take 500 attempts to find a bid according to a heuristic score
-        for _ in range(500):
-            bid = all_bids[randint(0, len(all_bids) - 1)]
-            bid_score = self.score_bid(bid)
-            if bid_score > best_bid_score:
-                best_bid_score, best_bid = bid_score, bid
 
-        return best_bid
-
-    def score_bid(self, bid: Bid, alpha: float = 0.95, eps: float = 0.1) -> float:
+    def score_bid(self, bid: Bid, alpha: float = 0.8, eps: float = 0.1) -> float:
         """Calculate heuristic score for a bid
 
         Args:
@@ -270,16 +298,17 @@ class TemplateAgent(DefaultParty):
         # dominated_bids = set()
         while bids:
             candidate_bid = bids.pop(0)
+            cand_bid_vals = [self.profile.getUtility(candidate_bid), self.opponent_model.get_predicted_utility(candidate_bid)]
             bid_nr = 0
             dominated = False
             while len(bids) != 0 and bid_nr < len(bids):
                 bid = bids[bid_nr]
-
-                if self._dominates(candidate_bid, bid):
+                bid_vals = [self.profile.getUtility(bid), self.opponent_model.get_predicted_utility(bid)]
+                if self._dominates(cand_bid_vals, bid_vals):
                     # If it is dominated remove the bid from all bids
                     bids.pop(bid_nr)
                     # dominated_bids.add(frozenset(bid.items()))
-                elif self._dominates(candidate_bid, bid):
+                elif self._dominates(bid_vals, cand_bid_vals):
                     dominated = True
                     # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
@@ -294,6 +323,7 @@ class TemplateAgent(DefaultParty):
                         "utility": [
                             self.profile.getUtility(candidate_bid),
                             self.opponent_model.get_predicted_utility(candidate_bid),
+                            self.score_bid(candidate_bid),
                         ],
                     }
                 )
@@ -303,11 +333,9 @@ class TemplateAgent(DefaultParty):
         return pareto_front
 
     def _dominates(self, bid, candidate_bid):
-        if self.profile.getUtility(bid) < self.profile.getUtility(candidate_bid):
+        if bid[0] < candidate_bid[0]:
             return False
-        elif self.opponent_model.get_predicted_utility(bid) < self.opponent_model.get_predicted_utility(
-            candidate_bid
-        ):
+        elif bid[1] < candidate_bid[1]:
             return False
         else:
             return True
