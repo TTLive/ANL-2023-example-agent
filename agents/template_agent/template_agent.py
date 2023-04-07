@@ -315,16 +315,21 @@ class TemplateAgent(DefaultParty):
 
     def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
         # normalize step?
-
         bid_my_util = self.profile.getUtility(bid) + step[0]
         bid_opp_util = self.opponent_model.get_predicted_utility(bid) + step[1]
-
-
-        distances = []
+        # finds actiall closest point to step
+        #distances = []
+        #for b in paretoFrontier:
+        #    distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
+        #closest_point_index = distances.index(numpy.minimum(distances))
+        newBid = None
         for b in paretoFrontier:
-            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
-        closest_point_index = distances.index(numpy.minimum(distances))
-        return paretoFrontier[closest_point_index]["bid"]
+            if (bid_opp_util <= b["utility"][1]):
+                newBid = b
+        if (newBid == None):
+            return bid
+        else:
+            return newBid["bid"]
 
     def _nashProduct(self, paretoFrontier):
         ratios = []
