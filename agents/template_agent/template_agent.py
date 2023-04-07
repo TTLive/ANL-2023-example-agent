@@ -54,7 +54,7 @@ class TemplateAgent(DefaultParty):
 
         self.last_received_bid: Bid = None
         self.last_offered_bid: Bid = None
-        self.mirrored_vector: tuple[float, float] = None
+        self.mirrored_vector: list[int] = None
 
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
@@ -169,8 +169,6 @@ class TemplateAgent(DefaultParty):
             self.opponent_model.update(bid)
 
             if self.last_received_bid:
-                test = self.opponent_model.get_predicted_utility(self.last_received_bid)
-                test2 = self.opponent_model.get_predicted_utility(bid)
                 received_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
                               - self.opponent_model.get_predicted_utility(bid)
                 offered_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
@@ -256,9 +254,9 @@ class TemplateAgent(DefaultParty):
         return best_bid
 
     def find_mirrored_bid(self) -> Bid:
-        opponent_val = OpponentModel.get_predicted_utility(self.last_received_bid)
-        my_val = self.profile.getUtility(self.last_received_bid)
-
+        pareto = self.getEstimatedPareto([x[0] for x in self.all_good_bids])
+        closest_bid = self._closestPoint(self.last_offered_bid, pareto, self.mirrored_vector)
+        return closest_bid
 
     def score_bid(self, bid: Bid, alpha: float = 0.95, eps: float = 0.1) -> float:
         """Calculate heuristic score for a bid
