@@ -97,7 +97,7 @@ class TemplateAgent(DefaultParty):
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
             self.good_bids_values = np.array([x[1] for x in self.all_good_bids])
             self.all_good_bids = [x[0] for x in self.all_good_bids]
-            #profile_connection.close()
+            profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
         # that is performed by one of the agents (including yourself).
@@ -174,6 +174,7 @@ class TemplateAgent(DefaultParty):
             # update opponent model with bid
             self.opponent_model.update(bid)
 
+            # Get a mirrored bid to the opponents bid
             if self.last_received_bid:
                 received_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
                               - self.opponent_model.get_predicted_utility(bid)
@@ -197,15 +198,21 @@ class TemplateAgent(DefaultParty):
         """This method is called when it is our turn. It should decide upon an action
         to perform and send this action to the opponent.
         """
-        my_bid = self.find_mirrored_bid()
-        # check if the last received offer is good enough
-        if self.accept_condition(self.last_received_bid, my_bid):
+        bid_util = self.profile.getUtility(self.last_received_bid)
+        # check if the last received offer is good enough according to simple conditions
+        if self.accept_condition(bid_util):
             # if so, accept the offer
             action = Accept(self.me, self.last_received_bid)
         else:
-            # if not, find a bid to propose as counter offer
-            self.previous_bids.append(my_bid)
-            action = Offer(self.me, my_bid)
+            #find a bid
+            my_bid = self.find_bid()
+            # accept if opponents last bid is better than your next bid
+            if bid_util > self.profile.getUtility(my_bid):
+                action = Accept(self.me, self.last_received_bid)
+            #otherwise offer our bid
+            else:    
+                self.previous_bids.append(my_bid)
+                action = Offer(self.me, my_bid)
 
         # send the action
         self.send_action(action)
@@ -223,24 +230,22 @@ class TemplateAgent(DefaultParty):
     ################################## Example methods below ##################################
     ###########################################################################################
 
-    def accept_condition(self, bid: Bid, my_bid) -> bool:
+    def accept_condition(self, bid) -> bool:
         if bid is None:
             return False
 
         # progress of the negotiation session between 0 and 1 (1 is deadline)
         progress = self.progress.get(time() * 1000)
-
+        bid_util = bid
         # very basic approach that accepts if the offer is valued above 0.7 and
         # 95% of the time towards the deadline has passed
         conditions = [
             # threshold for accepting decreases over time [0.9 to 0.65]
-            self.profile.getUtility(bid) > (0.9 - (progress / 4)),
+            bid_util > (0.9 - (progress / 4)),
 
             # accept if deadline nearly ended
             # Maybe change this to calculate avg turn time from previous turns and then if there is not enough time left accept
-            progress > 0.9,
-            # accept if opponents last bid is better than your next bid
-            self.profile.getUtility(bid) > self.profile.getUtility(my_bid),
+            progress > 0.9 and bid_util > 0.5,
         ]
         return any(conditions)
 
@@ -251,7 +256,7 @@ class TemplateAgent(DefaultParty):
         if len(self.previous_bids) < 1:
             best_bid = self.all_good_bids[-1]
             return best_bid
-        elif progress < 0.05:
+        elif progress < 0.00:
             start = np.argmax(self.good_bids_values > 0.8)
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
@@ -260,26 +265,41 @@ class TemplateAgent(DefaultParty):
                 return self.previous_bids[-1]
         elif progress < 0.8:
             #slow linear progress
-            #threshold of (1.0-0.8) -> (0.72-0.52) over progress form 0.2 -> 0.8
+            # in a slice of threshold - threshold + 0.3 where threshold goes from 0.7 -> 0.42
 
             threshold = 0.8 * (1 - (progress * 0.5))
             start = np.argmax(self.good_bids_values > threshold)
-            end = np.argmax(self.good_bids_values[start:]> threshold + 0.15)
-            paretoBids = self.getEstimatedPareto(self.all_good_bids[start : start+end])
-            if len(paretoBids) > 0:
-                return paretoBids[0]["bid"]
-            else:
-                return self.previous_bids[-1]
+            end = np.argmax(self.good_bids_values[start:]> threshold + 0.2)
+            paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
+            closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
+            return closest_bid
         #faster linear progress
+        # in a slice of everything till threshold where threshold goes from 0.8 -> 0.48
         else:
-            threshold = 0.72 * (1.7 - progress)
+            threshold = 0.80 * (1.8 - progress)**2
             end = np.argmax(self.good_bids_values> threshold)
             paretoBids = self.getEstimatedPareto(self.all_good_bids[:end])
-            if len(paretoBids) > 0:
-                return paretoBids[0]["bid"]
-            else:
-                return self.previous_bids[-1]
+            closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
+            print(f"getting desperate {len(paretoBids)}")
+            return closest_bid
 
+    def find_mirrored_bid(self) -> Bid:
+        progress = self.progress.get(time() * 1000)
+        # first turn -> make best possbile bid
+        if len(self.previous_bids) < 1:
+            best_bid = self.all_good_bids[-1]
+            return best_bid
+        elif progress < 0.00:
+            start = np.argmax(self.good_bids_values > 0.8)
+            rand_bid = choice(self.all_good_bids[start:])
+            if rand_bid:
+                return rand_bid
+            else: 
+                return self.previous_bids[-1]
+        else:
+            pareto = self.getEstimatedPareto(self.all_good_bids)
+            closest_bid = self._closestPoint(self.previous_bids[-1], pareto, self.mirrored_vector)
+            return closest_bid
 
     def score_bid(self, bid: Bid, alpha: float = 0.8, eps: float = 0.1) -> float:
         """Calculate heuristic score for a bid
@@ -308,7 +328,7 @@ class TemplateAgent(DefaultParty):
 
         return score
 
-    #todo optimise speed, could go in report
+    #returns all bids that have own utility above the threshold
     def getAllGoodBids(self, all_bids, threshold):
         bids : list(Bid, float) = []
         for bid in all_bids:
@@ -318,6 +338,8 @@ class TemplateAgent(DefaultParty):
         bids.sort(key=lambda a: a[1])
         return bids
 
+    #Using the estimated opponent model and own utility model get list of pareto bids from a list of bids
+    #Note that this is inspired by the getPareto in create_domains.py
     def getEstimatedPareto(self, bids):
         pareto_front = []
         # dominated_bids = set()
