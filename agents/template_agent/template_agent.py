@@ -5,6 +5,7 @@ from random import randint
 from time import time
 from typing import cast
 
+import numpy
 import geniusweb
 from geniusweb.actions.Accept import Accept
 from geniusweb.actions.Action import Action
@@ -234,7 +235,7 @@ class TemplateAgent(DefaultParty):
             # accept if opponents last bid is better than your next bid
             self.profile.getUtility(bid) > self.profile.getUtility(my_bid),
         ]
-        return all(conditions)
+        return any(conditions)
 
     def find_bid(self) -> Bid:
         # compose a list of all possible bids
@@ -310,7 +311,7 @@ class TemplateAgent(DefaultParty):
                     # If it is dominated remove the bid from all bids
                     bids.pop(bid_nr)
                     # dominated_bids.add(frozenset(bid.items()))
-                elif self._dominates(candidate_bid, bid):
+                elif self._dominates(bid, candidate_bid):
                     dominated = True
                     # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
@@ -343,3 +344,22 @@ class TemplateAgent(DefaultParty):
         else:
             return True
 
+    def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
+        # normalize step?
+
+        bid_my_util = self.profile.getUtility(bid) + step[0]
+        bid_opp_util = self.opponent_model.get_predicted_utility(bid) + step[1]
+
+
+        distances = []
+        for b in paretoFrontier:
+            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
+        closest_point_index = distances.index(numpy.minimum(distances))
+        return paretoFrontier[closest_point_index]["bid"]
+
+    def _nashProduct(self, paretoFrontier):
+        ratios = []
+        for b in paretoFrontier:
+            ratios.append(numpy.abs(b["utility"][0] - b["utility"][1]))
+        nash_index = ratios.index(numpy.minimum(ratios))
+        return paretoFrontier[nash_index]["bid"]
