@@ -92,10 +92,13 @@ class TemplateAgent(DefaultParty):
             self.opponent_model = OpponentModel(self.domain)
 
 
-            ### gets all good bids with a utility threshold of 0.7
+            # gets all good bids with a utility threshold of 0.45
             self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
+
+            # stores all utility values of bids in good_bids_values
             self.good_bids_values = np.array([x[1] for x in self.all_good_bids])
+            # stores all bids in all_good_bids
             self.all_good_bids = [x[0] for x in self.all_good_bids]
             profile_connection.close()
 
@@ -174,11 +177,15 @@ class TemplateAgent(DefaultParty):
             # update opponent model with bid
             self.opponent_model.update(bid)
 
-            # Get a mirrored bid to the opponents bid
+            # Get a mirrored vector from the opponents bid relative to previous bid
+            # Checks if opponent has a previous bid, otherwise not using a mirrored bid
             if self.last_received_bid:
+                # gets the estimated utility value of the opponent from their bid
                 opponent_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
                               - self.opponent_model.get_predicted_utility(bid)
+                # gets the agents utility value from their bid
                 received_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
+                # gets a mirrored vector as a mirrored bid
                 self.mirrored_vector = self.get_mirrored_vector(received_val, decimal.Decimal(str(opponent_val)))
 
             # set bid as last received
@@ -186,8 +193,14 @@ class TemplateAgent(DefaultParty):
 
     def get_mirrored_vector(self, our_val, opp_val):
         progress = self.progress.get(time() * 1000)
-        if (our_val < 0): progress = 1.5 - progress
-        else: progress = 0.5 + progress
+        # depending on progress and direction of their bid, changes the length
+        # lower utility value for our agent means we make a bid that has a lower utility value for the opponent
+        # as progress increases then vector becomes shorter and vice versa
+        if our_val < 0:
+            progress = 1.5 - progress
+        else:
+            progress = 0.5 + progress
+
         length = math.sqrt(opp_val * opp_val + our_val * our_val)
         our = 0
         opp = 0
@@ -195,6 +208,7 @@ class TemplateAgent(DefaultParty):
             our = float(our_val) / length * progress
         if opp_val != 0:
             opp = float(opp_val) / length * progress
+        # returns opp, val to get the mirrored vector
         return opp, our
 
     def my_turn(self):
@@ -275,6 +289,7 @@ class TemplateAgent(DefaultParty):
             end = np.argmax(self.good_bids_values[start:]> threshold + 0.2)
             #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
             paretoBids = self.getEstimatedPareto(self.all_good_bids[start:])
+            # finds the bid closest to our x value on the estimated pareto frontier from the mirrored bid
             closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
             return closest_bid
         #faster linear progress
@@ -301,6 +316,7 @@ class TemplateAgent(DefaultParty):
             else: 
                 return self.previous_bids[-1]
         else:
+
             pareto = self.getEstimatedPareto(self.all_good_bids)
             closest_bid = self._closestPoint(self.previous_bids[-1], pareto, self.mirrored_vector)
             return closest_bid
@@ -383,6 +399,7 @@ class TemplateAgent(DefaultParty):
 
         return pareto_front
 
+    # check if candidate_bid dominates bid
     def _dominates(self, bid, candidate_bid):
         if bid[0] < candidate_bid[0]:
             return False
@@ -391,6 +408,7 @@ class TemplateAgent(DefaultParty):
         else:
             return True
 
+    # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
     def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
         # normalize step?
         bid_my_util = self.profile.getUtility(bid) + decimal.Decimal(str(step[0]))
