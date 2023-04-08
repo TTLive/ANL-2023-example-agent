@@ -18,8 +18,8 @@ if not RESULTS_DIR.exists():
 settings = {
     "agents": [
         {
-            "class": "agents.conceder_agent.conceder_agent.ConcederAgent",
-            "parameters": {"storage_dir": "agent_storage/conceder_agent"},
+            "class": "agents.template_agent.template_agent.TemplateAgent",
+            "parameters": {"storage_dir": "agent_storage/temp2"},
         },
         {
             "class": "agents.template_agent.template_agent.TemplateAgent",

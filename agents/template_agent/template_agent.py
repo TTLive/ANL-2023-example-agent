@@ -58,6 +58,8 @@ class TemplateAgent(DefaultParty):
         self.last_received_bid: Bid = None
         self.last_offered_bid: Bid = None
         self.mirrored_vector: list[int] = None
+        self.count_since_paret = 3
+        self.paretoBids = None
 
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
@@ -273,7 +275,7 @@ class TemplateAgent(DefaultParty):
         if len(self.previous_bids) < 1:
             best_bid = self.all_good_bids[-1]
             return best_bid
-        elif progress < 0.00:
+        elif progress < 0.02:
             start = np.argmax(self.good_bids_values > 0.8)
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
@@ -283,14 +285,17 @@ class TemplateAgent(DefaultParty):
         elif progress < 0.8:
             #slow linear progress
             # in a slice of threshold - threshold + 0.3 where threshold goes from 0.7 -> 0.42
-
-            threshold = 0.8 * (1 - (progress * 0.5))
-            start = np.argmax(self.good_bids_values > threshold)
-            end = np.argmax(self.good_bids_values[start:]> threshold + 0.2)
-            #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
-            paretoBids = self.getEstimatedPareto(self.all_good_bids[start:])
+            if(self.count_since_paret > 2):
+                threshold = 1 * (1 - (progress * 0.5))
+                start = np.argmax(self.good_bids_values > 0.6)
+                end = np.argmax(self.good_bids_values > threshold)
+                #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
+                self.paretoBids = self.getEstimatedPareto(self.all_good_bids[start:end])
+                self.count_since_paret = 0
             # finds the bid closest to our x value on the estimated pareto frontier from the mirrored bid
-            closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
+            else:
+                self.count_since_paret += 1
+            closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
             return closest_bid
         #faster linear progress
         # in a slice of everything till threshold where threshold goes from 0.8 -> 0.48
@@ -321,7 +326,7 @@ class TemplateAgent(DefaultParty):
             closest_bid = self._closestPoint(self.previous_bids[-1], pareto, self.mirrored_vector)
             return closest_bid
 
-    def score_bid(self, bid: Bid, alpha: float = 0.8, eps: float = 0.1) -> float:
+    def score_bid(self, bid: Bid, alpha: float = 0.7, eps: float = 0.1) -> float:
         """Calculate heuristic score for a bid
 
         Args:
