@@ -176,23 +176,26 @@ class TemplateAgent(DefaultParty):
 
             # Get a mirrored bid to the opponents bid
             if self.last_received_bid:
-                received_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
+                opponent_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
                               - self.opponent_model.get_predicted_utility(bid)
-                offered_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
-                self.mirrored_vector = self.normalize(offered_val, decimal.Decimal(str(received_val)))
+                received_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
+                self.mirrored_vector = self.get_mirrored_vector(received_val, decimal.Decimal(str(opponent_val)))
 
             # set bid as last received
             self.last_received_bid = bid
 
-    def normalize(self, offered, received):
-        length = math.sqrt(received*received + offered*offered)
-        off = 0
-        rec = 0
-        if offered != 0:
-            off = float(offered) / length
-        if received != 0:
-            rec = float(received) / length
-        return off, rec
+    def get_mirrored_vector(self, our_val, opp_val):
+        progress = self.progress.get(time() * 1000)
+        if (our_val < 0): progress = 1.5 - progress
+        else: progress = 0.5 + progress
+        length = math.sqrt(opp_val * opp_val + our_val * our_val)
+        our = 0
+        opp = 0
+        if our_val != 0:
+            our = float(our_val) / length * progress
+        if opp_val != 0:
+            opp = float(opp_val) / length * progress
+        return opp, our
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
@@ -270,7 +273,8 @@ class TemplateAgent(DefaultParty):
             threshold = 0.8 * (1 - (progress * 0.5))
             start = np.argmax(self.good_bids_values > threshold)
             end = np.argmax(self.good_bids_values[start:]> threshold + 0.2)
-            paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
+            #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
+            paretoBids = self.getEstimatedPareto(self.all_good_bids[start:])
             closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
             return closest_bid
         #faster linear progress
