@@ -414,7 +414,7 @@ class TemplateAgent(DefaultParty):
             return True
 
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
-    def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
+    def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
         # normalize step?
         bid_my_util = self.profile.getUtility(bid) + decimal.Decimal(str(step[0]))
         bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(step[1]))
