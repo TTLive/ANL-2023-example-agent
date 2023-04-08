@@ -95,7 +95,7 @@ class TemplateAgent(DefaultParty):
 
 
             # gets all good bids with a utility threshold of 0.45
-            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
+            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.6)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
 
             # stores all utility values of bids in good_bids_values
@@ -195,6 +195,7 @@ class TemplateAgent(DefaultParty):
 
     def get_mirrored_vector(self, our_val, opp_val):
         progress = self.progress.get(time() * 1000)
+
         # depending on progress and direction of their bid, changes the length
         # lower utility value for our agent means we make a bid that has a lower utility value for the opponent
         # as progress increases then vector becomes shorter and vice versa
@@ -217,7 +218,10 @@ class TemplateAgent(DefaultParty):
         """This method is called when it is our turn. It should decide upon an action
         to perform and send this action to the opponent.
         """
-        bid_util = self.profile.getUtility(self.last_received_bid)
+        bid_util = 0
+        if self.last_received_bid:
+            bid_util = self.profile.getUtility(self.last_received_bid)
+
         # check if the last received offer is good enough according to simple conditions
         if self.accept_condition(bid_util):
             # if so, accept the offer
@@ -226,7 +230,7 @@ class TemplateAgent(DefaultParty):
             #find a bid
             my_bid = self.find_bid()
             # accept if opponents last bid is better than your next bid
-            if bid_util > self.profile.getUtility(my_bid):
+            if bid_util >= self.profile.getUtility(my_bid):
                 action = Accept(self.me, self.last_received_bid)
             #otherwise offer our bid
             else:    
@@ -275,7 +279,7 @@ class TemplateAgent(DefaultParty):
         if len(self.previous_bids) < 1:
             best_bid = self.all_good_bids[-1]
             return best_bid
-        elif progress < 0.02:
+        elif progress < 0.00:
             start = np.argmax(self.good_bids_values > 0.8)
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
@@ -288,9 +292,9 @@ class TemplateAgent(DefaultParty):
             if(self.count_since_paret > 2):
                 threshold = 1 * (1 - (progress * 0.5))
                 start = np.argmax(self.good_bids_values > 0.6)
-                end = np.argmax(self.good_bids_values > threshold)
+                ##end = np.argmax(self.good_bids_values > threshold)
                 #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
-                self.paretoBids = self.getEstimatedPareto(self.all_good_bids[start:end])
+                self.paretoBids = self.getEstimatedPareto(self.all_good_bids[start:])
                 self.count_since_paret = 0
             # finds the bid closest to our x value on the estimated pareto frontier from the mirrored bid
             else:
