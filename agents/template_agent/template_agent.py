@@ -5,6 +5,7 @@ from random import randint, choice
 from time import time
 from typing import cast
 import numpy as np
+from decimal import Decimal
 
 import numpy
 import geniusweb
@@ -49,7 +50,7 @@ class TemplateAgent(DefaultParty):
         self.progress: ProgressTime = None
         self.me: PartyId = None
         self.other: str = None
-        self.all_good_bids: list(Bid, float) = None
+        self.all_good_bids: list[Bid] = []
         self.good_bids_values = None
         self.settings: Settings = None
         self.storage_dir: str = None
@@ -91,15 +92,16 @@ class TemplateAgent(DefaultParty):
             self.domain = self.profile.getDomain()
             self.opponent_model = OpponentModel(self.domain)
 
-
             # gets all good bids with a utility threshold of 0.45
-            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
+            all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.45)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
 
-            # stores all utility values of bids in good_bids_values
-            self.good_bids_values = np.array([x[1] for x in self.all_good_bids])
             # stores all bids in all_good_bids
-            self.all_good_bids = [x[0] for x in self.all_good_bids]
+            self.all_good_bids = [x[0] for x in all_good_bids]
+
+            # stores all utility values of bids in good_bids_values
+            self.good_bids_values = np.array([x[1] for x in all_good_bids])
+
             profile_connection.close()
 
         # ActionDone informs you of an action (an offer or an accept)
@@ -215,7 +217,10 @@ class TemplateAgent(DefaultParty):
         """This method is called when it is our turn. It should decide upon an action
         to perform and send this action to the opponent.
         """
-        bid_util = self.profile.getUtility(self.last_received_bid)
+        bid_util = 0
+        if self.last_received_bid:
+            bid_util = self.profile.getUtility(self.last_received_bid)
+
         # check if the last received offer is good enough according to simple conditions
         if self.accept_condition(bid_util):
             # if so, accept the offer
@@ -227,7 +232,7 @@ class TemplateAgent(DefaultParty):
             if bid_util > self.profile.getUtility(my_bid):
                 action = Accept(self.me, self.last_received_bid)
             #otherwise offer our bid
-            else:    
+            else:
                 self.previous_bids.append(my_bid)
                 action = Offer(self.me, my_bid)
 
@@ -349,8 +354,8 @@ class TemplateAgent(DefaultParty):
         return score
 
     #returns all bids that have own utility above the threshold
-    def getAllGoodBids(self, all_bids, threshold):
-        bids : list(Bid, float) = []
+    def getAllGoodBids(self, all_bids: list[Bid], threshold) -> list[tuple[Bid, Decimal]]:
+        bids: list[tuple[Bid, Decimal]] = []
         for bid in all_bids:
             util = self.profile.getUtility(bid)
             if util > threshold:
@@ -360,7 +365,7 @@ class TemplateAgent(DefaultParty):
 
     #Using the estimated opponent model and own utility model get list of pareto bids from a list of bids
     #Note that this is inspired by the getPareto in create_domains.py
-    def getEstimatedPareto(self, bids):
+    def getEstimatedPareto(self, bids: list[Bid]) -> list[dict]:
         pareto_front = []
         # dominated_bids = set()
         while bids:
