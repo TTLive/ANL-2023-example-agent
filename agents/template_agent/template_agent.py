@@ -60,6 +60,7 @@ class TemplateAgent(DefaultParty):
         self.mirrored_vector: list[int] = None
         self.count_since_paret = 3
         self.paretoBids = None
+        self.opponent_previous_util = 0
 
         self.count_bid = 0
 
@@ -211,9 +212,9 @@ class TemplateAgent(DefaultParty):
         our = 0
         opp = 0
         if our_val != 0:
-            our = float(our_val) / length * progress
+            our = float(our_val) 
         if opp_val != 0:
-            opp = float(opp_val) / length * progress
+            opp = float(opp_val)
         # returns opp, val to get the mirrored vector
         return our, opp
 
@@ -267,7 +268,7 @@ class TemplateAgent(DefaultParty):
         # 95% of the time towards the deadline has passed
         conditions = [
             # threshold for accepting decreases over time [0.9 to 0.65]
-            bid_util > (0.9 - (progress / 4)),
+            bid_util > (0.9 - (progress / 3)),
 
             # accept if deadline nearly ended
             # Maybe change this to calculate avg turn time from previous turns and then if there is not enough time left accept
@@ -292,7 +293,7 @@ class TemplateAgent(DefaultParty):
         elif progress < 0.8:
             #slow linear progress
             # in a slice of threshold - threshold + 0.3 where threshold goes from 0.7 -> 0.42
-            if(self.count_since_paret > 2):
+            if(self.count_since_paret >= 0):
                 threshold = 1 * (1 - (progress * 0.5))
                 start = np.argmax(self.good_bids_values > 0.6)
                 ##end = np.argmax(self.good_bids_values > threshold)
@@ -403,21 +404,14 @@ class TemplateAgent(DefaultParty):
 
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
     def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
-
-        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[1]))
+        bid_opp_util = self.opponent_previous_util + decimal.Decimal(str(vector[0]))
+        self.opponent_previous_util = decimal.Decimal(str(self.profile.getUtility(bid)))
 
         newBid = None
         for b in paretoFrontier:
-            if (bid_opp_util <= b["utility"][1]):
-                if self.count_bid > 2 and b.__eq__(self.last_offered_bid):
-                    self.count_bid = 0
-                else:
-                    newBid = b
-                    if self.last_offered_bid.__eq__(newBid):
-                        self.count_bid += 1
-                    else:
-                        self.count_bid = 0
-                    break
+            if (bid_opp_util >= b["utility"][0]):
+                newBid = b
+                break
         if (newBid == None):
             return bid
         else:
