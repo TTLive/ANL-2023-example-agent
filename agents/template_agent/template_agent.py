@@ -185,11 +185,11 @@ class TemplateAgent(DefaultParty):
             # Checks if opponent has a previous bid, otherwise not using a mirrored bid
             if self.last_received_bid:
                 # gets the estimated utility value of the opponent from their bid
-                opponent_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
-                               - self.opponent_model.get_predicted_utility(bid)
+                opponent_val = self.opponent_model.get_predicted_utility(bid) - self.opponent_model.get_predicted_utility(self.last_received_bid)
+
 
                 # gets the agents utility value from their bid
-                received_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
+                received_val = self.profile.getUtility(bid) - self.profile.getUtility(self.last_received_bid)
                 # gets a mirrored vector as a mirrored bid
                 self.mirrored_vector = self.get_mirrored_vector(received_val, decimal.Decimal(str(opponent_val)))
 
@@ -215,7 +215,7 @@ class TemplateAgent(DefaultParty):
         if opp_val != 0:
             opp = float(opp_val) / length * progress
         # returns opp, val to get the mirrored vector
-        return our, opp
+        return opp, our
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
