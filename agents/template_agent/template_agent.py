@@ -409,8 +409,8 @@ class TemplateAgent(DefaultParty):
         # finds actiall closest point to step
         distances = []
         for b in paretoFrontier:
-            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
-        closest_point_index = distances.index(numpy.minimum(distances))
+            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + decimal.Decimal(str((b["utility"][1] - bid_opp_util)**2))))
+        closest_point_index = np.argmin(distances)
         return paretoFrontier[closest_point_index]["bid"]
 
     '''def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
