@@ -61,6 +61,8 @@ class TemplateAgent(DefaultParty):
         self.count_since_paret = 3
         self.paretoBids = None
 
+        self.count_bid = 0
+
         self.opponent_model: OpponentModel = None
         self.logger.log(logging.INFO, "party is initialized")
 
@@ -184,7 +186,8 @@ class TemplateAgent(DefaultParty):
             if self.last_received_bid:
                 # gets the estimated utility value of the opponent from their bid
                 opponent_val = self.opponent_model.get_predicted_utility(self.last_received_bid) \
-                              - self.opponent_model.get_predicted_utility(bid)
+                               - self.opponent_model.get_predicted_utility(bid)
+
                 # gets the agents utility value from their bid
                 received_val = self.profile.getUtility(self.last_received_bid) - self.profile.getUtility(bid)
                 # gets a mirrored vector as a mirrored bid
@@ -212,7 +215,7 @@ class TemplateAgent(DefaultParty):
         if opp_val != 0:
             opp = float(opp_val) / length * progress
         # returns opp, val to get the mirrored vector
-        return opp, our
+        return our, opp
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
@@ -308,26 +311,7 @@ class TemplateAgent(DefaultParty):
             end = np.argmax(self.good_bids_values> threshold)
             paretoBids = self.getEstimatedPareto(self.all_good_bids[:end])
             closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
-            print(f"getting desperate {len(paretoBids)}")
-            return closest_bid
-
-    def find_mirrored_bid(self) -> Bid:
-        progress = self.progress.get(time() * 1000)
-        # first turn -> make best possbile bid
-        if len(self.previous_bids) < 1:
-            best_bid = self.all_good_bids[-1]
-            return best_bid
-        elif progress < 0.00:
-            start = np.argmax(self.good_bids_values > 0.8)
-            rand_bid = choice(self.all_good_bids[start:])
-            if rand_bid:
-                return rand_bid
-            else: 
-                return self.previous_bids[-1]
-        else:
-
-            pareto = self.getEstimatedPareto(self.all_good_bids)
-            closest_bid = self._closestPoint(self.previous_bids[-1], pareto, self.mirrored_vector)
+            #print(f"getting desperate {len(paretoBids)}")
             return closest_bid
 
     def score_bid(self, bid: Bid, alpha: float = 0.7, eps: float = 0.1) -> float:
@@ -404,7 +388,7 @@ class TemplateAgent(DefaultParty):
                     }
                 )
 
-        pareto_front = sorted(pareto_front, key=lambda d: d["utility"][0])
+        pareto_front = reversed(sorted(pareto_front, key=lambda d: d["utility"][0]))
 
         return pareto_front
 
@@ -418,20 +402,22 @@ class TemplateAgent(DefaultParty):
             return True
 
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
-    def _closestPoint(self, bid, paretoFrontier, step=[0, 0]):
-        # normalize step?
-        bid_my_util = self.profile.getUtility(bid) + decimal.Decimal(str(step[0]))
-        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(step[1]))
-        # finds actiall closest point to step
-        #distances = []
-        #for b in paretoFrontier:
-        #    distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
-        #closest_point_index = distances.index(numpy.minimum(distances))
+    def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
+
+        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[1]))
+
         newBid = None
         for b in paretoFrontier:
             if (bid_opp_util <= b["utility"][1]):
-                newBid = b
-                break
+                if self.count_bid > 2 and b.__eq__(self.last_offered_bid):
+                    self.count_bid = 0
+                else:
+                    newBid = b
+                    if self.last_offered_bid.__eq__(newBid):
+                        self.count_bid += 1
+                    else:
+                        self.count_bid = 0
+                    break
         if (newBid == None):
             return bid
         else:
