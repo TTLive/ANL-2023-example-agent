@@ -211,9 +211,9 @@ class TemplateAgent(DefaultParty):
         our = 0
         opp = 0
         if our_val != 0:
-            our = float(our_val) / length * progress
+            our = float(our_val)
         if opp_val != 0:
-            opp = float(opp_val) / length * progress
+            opp = float(opp_val)
         # returns opp, val to get the mirrored vector
         return opp, our
 
