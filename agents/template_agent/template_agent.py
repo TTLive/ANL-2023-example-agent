@@ -97,7 +97,7 @@ class TemplateAgent(DefaultParty):
 
 
             # gets all good bids with a utility threshold of 0.45
-            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.6)
+            self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.5)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
 
             # stores all utility values of bids in good_bids_values
@@ -281,6 +281,7 @@ class TemplateAgent(DefaultParty):
         #first turn -> make best possbile bid
         if len(self.previous_bids) < 1:
             best_bid = self.all_good_bids[-1]
+            self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
             return best_bid
         elif progress < 0.00:
             start = np.argmax(self.good_bids_values > 0.8)
@@ -289,28 +290,28 @@ class TemplateAgent(DefaultParty):
                 return rand_bid
             else:
                 return self.previous_bids[-1]
-        elif progress < 0.8:
+        elif progress < 0.9:
             #slow linear progress
             # in a slice of threshold - threshold + 0.3 where threshold goes from 0.7 -> 0.42
-            if(self.count_since_paret > 2):
-                threshold = 1 * (1 - (progress * 0.5))
-                start = np.argmax(self.good_bids_values > 0.6)
-                ##end = np.argmax(self.good_bids_values > threshold)
-                #paretoBids = self.getEstimatedPareto(self.all_good_bids[start:start+end])
-                self.paretoBids = self.getEstimatedPareto(self.all_good_bids[start:])
-                self.count_since_paret = 0
-            # finds the bid closest to our x value on the estimated pareto frontier from the mirrored bid
-            else:
-                self.count_since_paret += 1
+            threshold = 0.7 - (progress * 0.15)
+            self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
+            inds = []
+            for i in range(len(self.all_good_bids)):
+                if(self.good_bids_values[i] >threshold and self.good_bids_oppValues[i] > self.mirrored_vector[0] - 0.2):
+                    inds.append(i)
+            self.paretoBids = self.getEstimatedPareto(inds)
             closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
             return closest_bid
         #faster linear progress
         # in a slice of everything till threshold where threshold goes from 0.8 -> 0.48
         else:
-            threshold = 0.80 * (1.8 - progress)**2
-            end = np.argmax(self.good_bids_values> threshold)
-            paretoBids = self.getEstimatedPareto(self.all_good_bids[:end])
-            closest_bid = self._closestPoint(self.previous_bids[-1], paretoBids, self.mirrored_vector)
+            threshold = 0.58 * (1.8 - progress)**2
+            inds = []
+            for i in range(len(self.all_good_bids)):
+                if(self.good_bids_values[i] > threshold > self.mirrored_vector[0]-0.1):
+                    inds.append(i)
+            self.paretoBids = self.getEstimatedPareto(inds)
+            closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
             #print(f"getting desperate {len(paretoBids)}")
             return closest_bid
 
@@ -353,20 +354,22 @@ class TemplateAgent(DefaultParty):
 
     #Using the estimated opponent model and own utility model get list of pareto bids from a list of bids
     #Note that this is inspired by the getPareto in create_domains.py
-    def getEstimatedPareto(self, bids):
+    def getEstimatedPareto(self, inds):
         pareto_front = []
         # dominated_bids = set()
-        while bids:
-            candidate_bid = bids.pop(0)
-            cand_bid_vals = [self.profile.getUtility(candidate_bid), self.opponent_model.get_predicted_utility(candidate_bid)]
+        while inds:
+            cand_ind = inds.pop(0)
+            candidate_bid = self.all_good_bids[cand_ind]
+            cand_bid_vals = [self.good_bids_values[cand_ind], self.good_bids_oppValues[cand_ind]]
             bid_nr = 0
             dominated = False
-            while len(bids) != 0 and bid_nr < len(bids):
-                bid = bids[bid_nr]
-                bid_vals = [self.profile.getUtility(bid), self.opponent_model.get_predicted_utility(bid)]
+            while len(inds) != 0 and bid_nr < len(inds):
+                bid_ind = inds[bid_nr]
+                bid = self.all_good_bids[bid_ind]
+                bid_vals = [self.good_bids_values[bid_ind], self.good_bids_oppValues[bid_ind]]
                 if self._dominates(cand_bid_vals, bid_vals):
                     # If it is dominated remove the bid from all bids
-                    bids.pop(bid_nr)
+                    inds.pop(bid_nr)
                     # dominated_bids.add(frozenset(bid.items()))
                 elif self._dominates(bid_vals, cand_bid_vals):
                     dominated = True
@@ -381,8 +384,8 @@ class TemplateAgent(DefaultParty):
                     {
                         "bid": candidate_bid,
                         "utility": [
-                            self.profile.getUtility(candidate_bid),
-                            self.opponent_model.get_predicted_utility(candidate_bid),
+                            self.good_bids_values[cand_ind], 
+                            self.good_bids_oppValues[cand_ind],
                             self.score_bid(candidate_bid),
                         ],
                     }
@@ -402,18 +405,7 @@ class TemplateAgent(DefaultParty):
             return True
 
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
-    def _closestPoint(self, bid, paretoFrontier, vector):
-        # normalize step?
-        bid_my_util = self.profile.getUtility(bid) + vector[0]
-        bid_opp_util = self.opponent_model.get_predicted_utility(bid) + vector[1]
-        # finds actiall closest point to step
-        distances = []
-        for b in paretoFrontier:
-            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + decimal.Decimal(str((b["utility"][1] - bid_opp_util)**2))))
-        closest_point_index = np.argmin(distances)
-        return paretoFrontier[closest_point_index]["bid"]
-
-    '''def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
+    def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
 
         bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[1]))
 
@@ -432,7 +424,7 @@ class TemplateAgent(DefaultParty):
         if (newBid == None):
             return bid
         else:
-            return newBid["bid"]'''
+            return newBid["bid"]
 
     def _nashProduct(self, paretoFrontier):
         ratios = []
