@@ -236,7 +236,7 @@ class TemplateAgent(DefaultParty):
             if bid_util >= self.profile.getUtility(my_bid):
                 action = Accept(self.me, self.last_received_bid)
             #otherwise offer our bid
-            else:    
+            else:
                 self.previous_bids.append(my_bid)
                 action = Offer(self.me, my_bid)
 
@@ -287,7 +287,7 @@ class TemplateAgent(DefaultParty):
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
                 return rand_bid
-            else: 
+            else:
                 return self.previous_bids[-1]
         elif progress < 0.8:
             #slow linear progress
@@ -402,7 +402,18 @@ class TemplateAgent(DefaultParty):
             return True
 
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
-    def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
+    def _closestPoint(self, bid, paretoFrontier, vector):
+        # normalize step?
+        bid_my_util = self.profile.getUtility(bid) + vector[0]
+        bid_opp_util = self.opponent_model.get_predicted_utility(bid) + vector[1]
+        # finds actiall closest point to step
+        distances = []
+        for b in paretoFrontier:
+            distances.append(numpy.sqrt((b["utility"][0] - bid_my_util)**2 + (b["utility"][1] - bid_opp_util)**2))
+        closest_point_index = distances.index(numpy.minimum(distances))
+        return paretoFrontier[closest_point_index]["bid"]
+
+    '''def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
 
         bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[1]))
 
@@ -421,7 +432,7 @@ class TemplateAgent(DefaultParty):
         if (newBid == None):
             return bid
         else:
-            return newBid["bid"]
+            return newBid["bid"]'''
 
     def _nashProduct(self, paretoFrontier):
         ratios = []
