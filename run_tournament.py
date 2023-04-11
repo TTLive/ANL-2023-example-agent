@@ -72,52 +72,9 @@ tournament_settings = {
         {
             "class": "agents.CSE3210.agent26.agent26.Agent26",
         },
-        {
-            "class": "agents.CSE3210.agent27.agent27.Agent27",
-        },
-        {
-            "class": "agents.CSE3210.agent29.agent29.Agent29",
-        },
-        {
-            "class": "agents.CSE3210.agent32.agent32.Agent32",
-        },
-        {
-            "class": "agents.CSE3210.agent33.agent33.Agent33",
-        },
-        {
-            "class": "agents.CSE3210.agent41.agent41.Agent41",
-        },
-        {
-            "class": "agents.CSE3210.agent43.agent43.Agent43",
-        },
-        {
-            "class": "agents.CSE3210.agent50.agent50.Agent50",
-        },
-        {
-            "class": "agents.CSE3210.agent52.agent52.Agent52",
-        },
-        {
-            "class": "agents.CSE3210.agent55.agent55.Agent55",
-        },
-        {
-            "class": "agents.CSE3210.agent58.agent58.Agent58",
-        },
-        {
-            "class": "agents.CSE3210.agent61.agent61.Agent61",
-        },
-        {
-            "class": "agents.CSE3210.agent64.agent64.Agent64",
-        },
-        {
-            "class": "agents.CSE3210.agent67.agent67.Agent67",
-        },
-        {
-            "class": "agents.CSE3210.agent68.agent68.Agent68",
-        },
     ],
     "profile_sets": [
         ["domains/domain00/profileA.json", "domains/domain00/profileB.json"],
-        ["domains/domain01/profileA.json", "domains/domain01/profileB.json"],
     ],
     "deadline_time_ms": 10000,
 }

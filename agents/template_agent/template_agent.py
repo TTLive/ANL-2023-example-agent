@@ -99,7 +99,7 @@ class TemplateAgent(DefaultParty):
             # gets all good bids with a utility threshold of 0.45
             self.all_good_bids = self.getAllGoodBids(AllBidsList(self.domain), 0.5)
             #print(f"\n the amount of good bids is: {len(self.all_good_bids)}\n")
-
+            self.mirrored_vector = [0,0]
             # stores all utility values of bids in good_bids_values
             self.good_bids_values = np.array([x[1] for x in self.all_good_bids])
             # stores all bids in all_good_bids
@@ -180,7 +180,7 @@ class TemplateAgent(DefaultParty):
 
             # update opponent model with bid
             self.opponent_model.update(bid)
-
+            
             # Get a mirrored vector from the opponents bid relative to previous bid
             # Checks if opponent has a previous bid, otherwise not using a mirrored bid
             if self.last_received_bid:
@@ -192,9 +192,9 @@ class TemplateAgent(DefaultParty):
                 received_val = self.profile.getUtility(bid) - self.profile.getUtility(self.last_received_bid)
                 # gets a mirrored vector as a mirrored bid
                 self.mirrored_vector = self.get_mirrored_vector(received_val, decimal.Decimal(str(opponent_val)))
-
-            # set bid as last received
             self.last_received_bid = bid
+            # set bid as last received
+           
 
     def get_mirrored_vector(self, our_val, opp_val):
         progress = self.progress.get(time() * 1000)
@@ -211,9 +211,9 @@ class TemplateAgent(DefaultParty):
         our = 0
         opp = 0
         if our_val != 0:
-            our = float(our_val)
+            our = float(our_val) * progress
         if opp_val != 0:
-            opp = float(opp_val)
+            opp = float(opp_val) * progress
         # returns opp, val to get the mirrored vector
         return opp, our
 
@@ -271,7 +271,7 @@ class TemplateAgent(DefaultParty):
 
             # accept if deadline nearly ended
             # Maybe change this to calculate avg turn time from previous turns and then if there is not enough time left accept
-            progress > 0.9 and bid_util > 0.5,
+            progress > 0.9 and bid_util > 0.4,
         ]
         return any(conditions)
 
@@ -296,8 +296,9 @@ class TemplateAgent(DefaultParty):
             threshold = 0.7 - (progress * 0.15)
             self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
             inds = []
+            previous_bid_x = decimal.Decimal(str(self.opponent_model.get_predicted_utility(self.previous_bids[-1]))) + decimal.Decimal(str(self.mirrored_vector[0])) - decimal.Decimal(str(0.1))
             for i in range(len(self.all_good_bids)):
-                if(self.good_bids_values[i] >threshold and self.good_bids_oppValues[i] > self.mirrored_vector[0] - 0.2):
+                if(self.good_bids_values[i] > threshold and self.good_bids_oppValues[i] > previous_bid_x):
                     inds.append(i)
             self.paretoBids = self.getEstimatedPareto(inds)
             closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
@@ -306,9 +307,10 @@ class TemplateAgent(DefaultParty):
         # in a slice of everything till threshold where threshold goes from 0.8 -> 0.48
         else:
             threshold = 0.58 * (1.8 - progress)**2
+            previous_bid_x = decimal.Decimal(str(self.opponent_model.get_predicted_utility(self.previous_bids[-1]))) + decimal.Decimal(str(self.mirrored_vector[0])) - decimal.Decimal(str(0.05))
             inds = []
             for i in range(len(self.all_good_bids)):
-                if(self.good_bids_values[i] > threshold > self.mirrored_vector[0]-0.1):
+                if(self.good_bids_values[i] > threshold > self.mirrored_vector[0] and self.good_bids_oppValues[i] > previous_bid_x):
                     inds.append(i)
             self.paretoBids = self.getEstimatedPareto(inds)
             closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
@@ -357,6 +359,7 @@ class TemplateAgent(DefaultParty):
     def getEstimatedPareto(self, inds):
         pareto_front = []
         # dominated_bids = set()
+        rank2 = []
         while inds:
             cand_ind = inds.pop(0)
             candidate_bid = self.all_good_bids[cand_ind]
@@ -367,11 +370,12 @@ class TemplateAgent(DefaultParty):
                 bid_ind = inds[bid_nr]
                 bid = self.all_good_bids[bid_ind]
                 bid_vals = [self.good_bids_values[bid_ind], self.good_bids_oppValues[bid_ind]]
-                if self._dominates(cand_bid_vals, bid_vals):
+                if self._dominates(bid_vals, cand_bid_vals):
                     # If it is dominated remove the bid from all bids
                     inds.pop(bid_nr)
+                    rank2.append(bid_ind)
                     # dominated_bids.add(frozenset(bid.items()))
-                elif self._dominates(bid_vals, cand_bid_vals):
+                elif self._dominates(cand_bid_vals, bid_vals):
                     dominated = True
                     # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
@@ -380,6 +384,45 @@ class TemplateAgent(DefaultParty):
 
             if not dominated:
                 # add the non-dominated bid to the Pareto frontier
+                
+                pareto_front.append(
+                    {
+                        "bid": candidate_bid,
+                        "utility": [
+                            self.good_bids_values[cand_ind], 
+                            self.good_bids_oppValues[cand_ind],
+                            self.score_bid(candidate_bid),
+                        ],
+                    }
+                )
+            else:
+                rank2.append(cand_ind)
+
+        # dominated_bids = set()
+        while rank2:
+            cand_ind = rank2.pop(0)
+            candidate_bid = self.all_good_bids[cand_ind]
+            cand_bid_vals = [self.good_bids_values[cand_ind], self.good_bids_oppValues[cand_ind]]
+            bid_nr = 0
+            dominated = False
+            while len(rank2) != 0 and bid_nr < len(rank2):
+                bid_ind = rank2[bid_nr]
+                bid = self.all_good_bids[bid_ind]
+                bid_vals = [self.good_bids_values[bid_ind], self.good_bids_oppValues[bid_ind]]
+                if self._dominates(bid_vals, cand_bid_vals):
+                    # If it is dominated remove the bid from all bids
+                    rank2.pop(bid_nr)
+                    # dominated_bids.add(frozenset(bid.items()))
+                elif self._dominates(cand_bid_vals, bid_vals):
+                    dominated = True
+                    # dominated_bids.add(frozenset(candidate_bid.items()))
+                    bid_nr += 1
+                else:
+                    bid_nr += 1
+
+            if not dominated:
+                # add the non-dominated bid to the Pareto frontier
+                
                 pareto_front.append(
                     {
                         "bid": candidate_bid,
@@ -391,15 +434,15 @@ class TemplateAgent(DefaultParty):
                     }
                 )
 
-        pareto_front = reversed(sorted(pareto_front, key=lambda d: d["utility"][0]))
+        pareto_front = reversed(sorted(pareto_front, key=lambda a: a["utility"][0]))
 
         return pareto_front
 
     # check if candidate_bid dominates bid
     def _dominates(self, bid, candidate_bid):
-        if bid[0] < candidate_bid[0]:
+        if bid[0] > candidate_bid[0]:
             return False
-        elif bid[1] < candidate_bid[1]:
+        elif bid[1] > candidate_bid[1]:
             return False
         else:
             return True
@@ -407,20 +450,13 @@ class TemplateAgent(DefaultParty):
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
     def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
 
-        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[1]))
+        bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[0]))
 
         newBid = None
         for b in paretoFrontier:
             if (bid_opp_util <= b["utility"][1]):
-                if self.count_bid > 2 and b.__eq__(self.last_offered_bid):
-                    self.count_bid = 0
-                else:
-                    newBid = b
-                    if self.last_offered_bid.__eq__(newBid):
-                        self.count_bid += 1
-                    else:
-                        self.count_bid = 0
-                    break
+                newBid = b
+                break
         if (newBid == None):
             return bid
         else:
