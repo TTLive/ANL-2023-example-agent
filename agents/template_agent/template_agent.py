@@ -215,7 +215,7 @@ class TemplateAgent(DefaultParty):
         if opp_val != 0:
             opp = float(opp_val) * progress
         # returns opp, val to get the mirrored vector
-        return opp, our
+        return our, opp
 
     def my_turn(self):
         """This method is called when it is our turn. It should decide upon an action
@@ -283,7 +283,7 @@ class TemplateAgent(DefaultParty):
             best_bid = self.all_good_bids[-1]
             self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
             return best_bid
-        elif progress < 0.00:
+        elif progress < 0.01:
             start = np.argmax(self.good_bids_values > 0.8)
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
