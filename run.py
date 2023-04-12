@@ -18,15 +18,15 @@ if not RESULTS_DIR.exists():
 settings = {
     "agents": [
         {
-            "class": "agents.ANL2022.dreamteam109_agent.dreamteam109_agent.DreamTeam109Agent",
-            "parameters": {"storage_dir": "agent_storage/dreamteamAgent"},
+            "class": "agents.boulware_agent.boulware_agent.BoulwareAgent",
+            "parameters": {"storage_dir": "agent_storage/boulagent"},
         },
         {
             "class": "agents.template_agent.template_agent.TemplateAgent",
             "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
         },
     ],
-    "profiles": ["domains/domain07/profileA.json", "domains/domain07/profileB.json"],
+    "profiles": ["domains/domain04/profileA.json", "domains/domain04/profileB.json"],
     "deadline_time_ms": 10000,
 }
 

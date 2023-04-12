@@ -283,7 +283,8 @@ class TemplateAgent(DefaultParty):
             best_bid = self.all_good_bids[-1]
             self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
             return best_bid
-        elif progress < 0.01:
+        #Next couple of turns make random bids with high utility
+        elif progress < 0.02:
             start = np.argmax(self.good_bids_values > 0.8)
             rand_bid = choice(self.all_good_bids[start:])
             if rand_bid:
@@ -292,19 +293,22 @@ class TemplateAgent(DefaultParty):
                 return self.previous_bids[-1]
         elif progress < 0.9:
             #slow linear progress
-            # in a slice of threshold - threshold + 0.3 where threshold goes from 0.7 -> 0.42
+            # only consider bids from the thresholdvalue and forward, threshold slowly decreases over time
             threshold = 0.7 - (progress * 0.15)
+            #each turn calculate opponent bid util since it might have changed when updating the model
             self.good_bids_oppValues = np.array([self.opponent_model.get_predicted_utility(x) for x in self.all_good_bids])
             inds = []
+            #get opponent utility of mirrored vector placed upon our previous bid
             previous_bid_x = decimal.Decimal(str(self.opponent_model.get_predicted_utility(self.previous_bids[-1]))) + decimal.Decimal(str(self.mirrored_vector[0])) - decimal.Decimal(str(0.1))
+            #find all indices in all_good_bids that satisfy both the threshold and the opponent utility value
             for i in range(len(self.all_good_bids)):
                 if(self.good_bids_values[i] > threshold and self.good_bids_oppValues[i] > previous_bid_x):
                     inds.append(i)
             self.paretoBids = self.getEstimatedPareto(inds)
             closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
             return closest_bid
-        #faster linear progress
-        # in a slice of everything till threshold where threshold goes from 0.8 -> 0.48
+        #faster progress
+        #Do the same as previously but here the threshold will rapidly decrease, note that when below 0.45 it doesnt matter since the bids are not in all_good_bids
         else:
             threshold = 0.58 * (1.8 - progress)**2
             previous_bid_x = decimal.Decimal(str(self.opponent_model.get_predicted_utility(self.previous_bids[-1]))) + decimal.Decimal(str(self.mirrored_vector[0])) - decimal.Decimal(str(0.05))
@@ -314,7 +318,6 @@ class TemplateAgent(DefaultParty):
                     inds.append(i)
             self.paretoBids = self.getEstimatedPareto(inds)
             closest_bid = self._closestPoint(self.previous_bids[-1], self.paretoBids, self.mirrored_vector)
-            #print(f"getting desperate {len(paretoBids)}")
             return closest_bid
 
     def score_bid(self, bid: Bid, alpha: float = 0.7, eps: float = 0.1) -> float:
@@ -358,7 +361,7 @@ class TemplateAgent(DefaultParty):
     #Note that this is inspired by the getPareto in create_domains.py
     def getEstimatedPareto(self, inds):
         pareto_front = []
-        # dominated_bids = set()
+        #save all non Pareto bids to find second rank later
         rank2 = []
         while inds:
             cand_ind = inds.pop(0)
@@ -374,10 +377,8 @@ class TemplateAgent(DefaultParty):
                     # If it is dominated remove the bid from all bids
                     inds.pop(bid_nr)
                     rank2.append(bid_ind)
-                    # dominated_bids.add(frozenset(bid.items()))
                 elif self._dominates(cand_bid_vals, bid_vals):
                     dominated = True
-                    # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
                 else:
                     bid_nr += 1
@@ -391,14 +392,13 @@ class TemplateAgent(DefaultParty):
                         "utility": [
                             self.good_bids_values[cand_ind], 
                             self.good_bids_oppValues[cand_ind],
-                            self.score_bid(candidate_bid),
                         ],
                     }
                 )
             else:
                 rank2.append(cand_ind)
 
-        # dominated_bids = set()
+        #Also find all second rank pareto bids by running pareto without the actual Pareto bids
         while rank2:
             cand_ind = rank2.pop(0)
             candidate_bid = self.all_good_bids[cand_ind]
@@ -410,18 +410,14 @@ class TemplateAgent(DefaultParty):
                 bid = self.all_good_bids[bid_ind]
                 bid_vals = [self.good_bids_values[bid_ind], self.good_bids_oppValues[bid_ind]]
                 if self._dominates(bid_vals, cand_bid_vals):
-                    # If it is dominated remove the bid from all bids
                     rank2.pop(bid_nr)
-                    # dominated_bids.add(frozenset(bid.items()))
                 elif self._dominates(cand_bid_vals, bid_vals):
                     dominated = True
-                    # dominated_bids.add(frozenset(candidate_bid.items()))
                     bid_nr += 1
                 else:
                     bid_nr += 1
 
             if not dominated:
-                # add the non-dominated bid to the Pareto frontier
                 
                 pareto_front.append(
                     {
@@ -429,11 +425,10 @@ class TemplateAgent(DefaultParty):
                         "utility": [
                             self.good_bids_values[cand_ind], 
                             self.good_bids_oppValues[cand_ind],
-                            self.score_bid(candidate_bid),
                         ],
                     }
                 )
-
+        #Sort descending on our utility
         pareto_front = reversed(sorted(pareto_front, key=lambda a: a["utility"][0]))
 
         return pareto_front
@@ -450,10 +445,12 @@ class TemplateAgent(DefaultParty):
     # finds the bid with the closest x value on the pareto frontier from the previous bid and vector
     def _closestPoint(self, bid, paretoFrontier, vector, step=[0, 0]):
 
+        #finds the opponent utility of our mirrored vector (based on previous opponent bid) placed on our previous bid
         bid_opp_util = decimal.Decimal(str(self.opponent_model.get_predicted_utility(bid))) + decimal.Decimal(str(vector[0]))
 
         newBid = None
         for b in paretoFrontier:
+            #should take the first bid that has same or better opponent utility as our mirrored vector
             if (bid_opp_util <= b["utility"][1]):
                 newBid = b
                 break
