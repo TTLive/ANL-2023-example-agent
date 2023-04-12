@@ -22,8 +22,8 @@ settings = {
             "parameters": {"storage_dir": "agent_storage/boulagent"},
         },
         {
-            "class": "agents.template_agent.template_agent.TemplateAgent",
-            "parameters": {"storage_dir": "agent_storage/TemplateAgent"},
+            "class": "agents.group66_agent.group66_agent.Group66Agent",
+            "parameters": {"storage_dir": "agent_storage/Group66Agent"},
         },
     ],
     "profiles": ["domains/domain04/profileA.json", "domains/domain04/profileB.json"],
